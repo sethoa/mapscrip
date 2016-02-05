@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+
+    <title>Map Scriptures</title>
+    <meta name="description" content="The LDS Standard Works, Mapped">
+    <meta name="author" content="Stephen W. Liddle">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+
+    <link rel="stylesheet" href="css/styles.css?v=1.0">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.5/css/materialize.min.css">
+
+    <script src="https://code.jquery.com/jquery-2.2.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.5/js/materialize.min.js"></script>
+    <script src="js/scriptures.js"></script>
+
+    <!--[if lt IE 9]>
+    <script src="http://html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+</head>
+<body>
+    <div id="wrapper">
+        <div id="header">
+            <div id="crumb"><ul><li>The Scriptures</li></ul></div>
+            <div id="centerhead"><div class="title">The Scriptures, Mapped</div><div class="subtitle">By Stephen W. Liddle, PhD &amp; Taylor Halverson, PhD</div></div>
+            <div id="menu">Login</div>
+        </div>
+        <div id="content">
+            <div id="scriptures">
+                <div id="scripnav">
+                </div>
+            </div>
+            <div id="map"></div>
+        </div>
+    </div>
+
+    <script type="text/javascript">
+        // Initialize Google Maps API
+        var map;
+        function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+                center: {lat: 31.7962415, lng: 35.0349307},
+                zoom: 9,
+                mapTypeId: google.maps.MapTypeId.TERRAIN,
+                zoomControl: true,
+                mapTypeControl: true,
+                scaleControl: true,
+                streetViewControl: true,
+                rotateControl: true
+            });
+
+            map.setTilt(45);
+        }
+
+        // Navigate the scriptures panel to the home view
+        $(function () {
+            Scriptures.navigateHome();
+        });
+
+        function showLocation(geotagId, placename, latitude, longitude, viewLatitude, viewLongitude, viewTilt,
+                              viewRoll, viewAltitude, viewHeading) {
+
+            Scriptures.showLocation(geotagId, placename, latitude, longitude, viewLatitude,
+                                    viewLongitude, viewTilt, viewRoll, viewAltitude, viewHeading);
+        }
+    </script>
+    <script async defer
+      src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDxMRynoX_D_rzRWX-urzhxAAOPcZCng2s&callback=initMap">
+    </script>
+</body>
+</html>
