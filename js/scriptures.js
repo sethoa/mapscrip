@@ -1,13 +1,14 @@
 // JSLint directives
 /*property
-    LatLngBounds, Marker, abbr, animate, appendTo, attr, backName, bookById,
-    books, citeAbbr, citeFull, click, complete, css, duration, each, error,
-    exec, extend, fitBounds, forEach, fullName, get, getAttribute, getCenter,
-    getPosition, getTitle, gridName, html, id, jstTitle, lat, length, lng, log,
-    map, maps, maxBookId, minBookId, navigateBook, navigateChapter,
-    navigateHome, navigateVolumeBook, nextChapter, numChapters, opacity, panTo,
-    parentBookId, position, prevChapter, push, queue, remove, round, setMap,
-    setZoom, showLocation, slice, subdiv, success, target, title, tocName,
+    LatLngBounds, Marker, abbr, animate, appendTo, attr, backName, bookByAbbr,
+    bookById, books, citeAbbr, citeFull, click, complete, css, duration, each,
+    error, exec, extend, fitBounds, forEach, fullName, get, getAttribute,
+    getCenter, getPosition, getScripture, getTitle, gridName, html, id,
+    jstTitle, lat, length, lng, log, map, maps, maxBookId, minBookId,
+    navigateBook, navigateChapter, navigateHome, navigateVolumeBook,
+    nextChapter, numChapters, opacity, panTo, parentBookId, position,
+    prevChapter, push, queue, remove, round, setMap, setZoom, showLocation,
+    slice, subdiv, success, target, title, titleForBookChapter, tocName,
     urlForScriptureChapter, urlPath, volumes, webTitle
 */
 /*jslint browser: true */
@@ -23,6 +24,9 @@ var Scriptures = (function () {
     // Default animation duration.
     var ANIMATION_DURATION = 700;
 
+    // Get scriptures parser.
+    var GET_SCRIPTURE_PARSER = /^\?book=(.*)&chap=(.*)&verses=(.*)&jst=(.*)$/;
+
     // Regular expression complete with capture groups to parse a lat/lon
     // structure in an anchor tag for our scriptures format.
     var LAT_LON_PARSER = /\((.*),'(.*)',(.*),(.*),(.*),(.*),(.*),(.*),(.*),(.*)\)/;
@@ -35,6 +39,9 @@ var Scriptures = (function () {
      */
     // Main data structure of all book objects.
     var books;
+
+    // Dictionary of books keyed by their abbreviation.
+    var booksByAbbr;
 
     // Markers associated with the Google Map for the current chapter.
     var gmMarkers = [];
@@ -183,6 +190,10 @@ var Scriptures = (function () {
         }
     };
 
+    var titleForBookChapter = function (book, chapter) {
+        return book.citeAbbr + (chapter > 0 ? ' ' + chapter : '');
+    }
+
     var transitionBreadcrumbs = function (newCrumbs) {
         // Use cross-dissolve transition, non-directional
         var crumbs = $('#header #crumb ul');
@@ -259,12 +270,39 @@ var Scriptures = (function () {
     /*------------------------------------------------------------------------
      *                      PUBLIC METHODS
      */
+    publicInterface.bookByAbbr = function (abbr) {
+        if (booksByAbbr === undefined) {
+            booksByAbbr = {};
+
+            Object.keys(books).forEach(function (key) {
+                var book = books[key];
+
+                booksByAbbr[book.abbr] = book;
+            });
+        }
+
+        return booksByAbbr[abbr];
+    };
+
     publicInterface.bookById = function (id) {
         // Note that we'd need to return a clone of the book object if we
         // wanted to guarantee read-only encapsulation.  As it is here,
         // the client could change the book object if they wish, and our
         // copy would change too.
         return books[id];
+    };
+
+    publicInterface.getScripture = function (args) {
+        var book;
+        var matches = GET_SCRIPTURE_PARSER.exec(args);
+
+        if (matches) {
+            book = publicInterface.bookByAbbr(matches[1]);
+
+            if (book !== undefined) {
+                publicInterface.navigateChapter(book.id, matches[2], matches[3], matches[4]);
+            }
+        }
     };
 
     publicInterface.nextChapter = function (bookId, chapter) {
@@ -274,7 +312,7 @@ var Scriptures = (function () {
 
         if (book !== undefined) {
             if (chapter < book.numChapters) {
-                return [bookId, chapter + 1];
+                return [bookId, chapter + 1, titleForBookChapter(book, chapter + 1)];
             }
 
             nextBook = publicInterface.bookById(bookId + 1);
@@ -284,7 +322,7 @@ var Scriptures = (function () {
                     nextChapter = 1;
                 }
 
-                return [nextBook.id, nextChapter];
+                return [nextBook.id, nextChapter, titleForBookChapter(nextBook, 1)];
             }
         }
     };
@@ -295,13 +333,13 @@ var Scriptures = (function () {
 
         if (book !== undefined) {
             if (chapter > 1) {
-                return [bookId, chapter - 1];
+                return [bookId, chapter - 1, titleForBookChapter(book, chapter - 1)];
             }
 
             prevBook = publicInterface.bookById(bookId - 1);
 
             if (prevBook !== undefined) {
-                return [prevBook.id, prevBook.numChapters];
+                return [prevBook.id, prevBook.numChapters, titleForBookChapter(prevBook, prevBook.numChapters)];
             }
         }
     };
@@ -333,7 +371,7 @@ var Scriptures = (function () {
         publicInterface.navigateVolumeBook(volume, book);
     };
 
-    publicInterface.navigateChapter = function (bookId, chapter) {
+    publicInterface.navigateChapter = function (bookId, chapter, verses, jst) {
         var book;
         var nextPrev;
         var volume;
@@ -350,17 +388,17 @@ var Scriptures = (function () {
                 nextPrevLink = '';
             } else {
                 nextPrevLink = '<a href="javascript:void(0);" onclick="Scriptures.navigateChapter(' +
-                    nextPrev[0] + ', ' + nextPrev[1] + ')"><i class="material-icons">skip_previous</i></a>';
+                    nextPrev[0] + ', ' + nextPrev[1] + ')" title="' + nextPrev[2] + '")"><i class="material-icons">skip_previous</i></a>';
             }
 
             nextPrev = publicInterface.nextChapter(bookId, chapter);
 
             if (nextPrev !== undefined) {
                 nextPrevLink += '<a href="javascript:void(0);" onclick="Scriptures.navigateChapter(' +
-                    nextPrev[0] + ', ' + nextPrev[1] + ')"><i class="material-icons">skip_next</i></a>';
+                    nextPrev[0] + ', ' + nextPrev[1] + ')" title="' + nextPrev[2] + '")"><i class="material-icons">skip_next</i></a>';
             }
 
-            $.get(publicInterface.urlForScriptureChapter(bookId, chapter))
+            $.get(publicInterface.urlForScriptureChapter(bookId, chapter, verses, jst))
                 .success(getScriptureCallback)
                 .error(getScriptureFailed);
         }
@@ -558,7 +596,7 @@ var Scriptures = (function () {
                 'gridName': 'Ruth',
                 'citeFull': 'Ruth'},
         '109': {'id': 109,
-                'abbr': '1 sam',
+                'abbr': '1_sam',
                 'citeAbbr': '1 Sam.',
                 'fullName': '1 Samuel',
                 'numChapters': 31,
@@ -572,7 +610,7 @@ var Scriptures = (function () {
                 'gridName': '1 Sam.',
                 'citeFull': '1 Samuel'},
         '110': {'id': 110,
-                'abbr': '2 sam',
+                'abbr': '2_sam',
                 'citeAbbr': '2 Sam.',
                 'fullName': '2 Samuel',
                 'numChapters': 24,
@@ -586,7 +624,7 @@ var Scriptures = (function () {
                 'gridName': '2 Sam.',
                 'citeFull': '2 Samuel'},
         '111': {'id': 111,
-                'abbr': '1 kgs',
+                'abbr': '1_kgs',
                 'citeAbbr': '1 Kgs.',
                 'fullName': '1 Kings',
                 'numChapters': 22,
@@ -600,7 +638,7 @@ var Scriptures = (function () {
                 'gridName': '1 Kings',
                 'citeFull': '1 Kings'},
         '112': {'id': 112,
-                'abbr': '2 kgs',
+                'abbr': '2_kgs',
                 'citeAbbr': '2 Kgs.',
                 'fullName': '2 Kings',
                 'numChapters': 25,
@@ -614,7 +652,7 @@ var Scriptures = (function () {
                 'gridName': '2 Kings',
                 'citeFull': '2 Kings'},
         '113': {'id': 113,
-                'abbr': '1 chr',
+                'abbr': '1_chr',
                 'citeAbbr': '1 Chr.',
                 'fullName': '1 Chronicles',
                 'numChapters': 29,
@@ -628,7 +666,7 @@ var Scriptures = (function () {
                 'gridName': '1 Chron.',
                 'citeFull': '1 Chronicles'},
         '114': {'id': 114,
-                'abbr': '2 chr',
+                'abbr': '2_chr',
                 'citeAbbr': '2 Chr.',
                 'fullName': '2 Chronicles',
                 'numChapters': 36,
@@ -1076,7 +1114,7 @@ var Scriptures = (function () {
                 'gridName': 'Romans',
                 'citeFull': 'Romans'},
         '146': {'id': 146,
-                'abbr': '1 cor',
+                'abbr': '1_cor',
                 'citeAbbr': '1 Cor.',
                 'fullName': '1 Corinthians',
                 'numChapters': 16,
@@ -1090,7 +1128,7 @@ var Scriptures = (function () {
                 'gridName': '1 Cor.',
                 'citeFull': '1 Corinthians'},
         '147': {'id': 147,
-                'abbr': '2 cor',
+                'abbr': '2_cor',
                 'citeAbbr': '2 Cor.',
                 'fullName': '2 Corinthians',
                 'numChapters': 13,
@@ -1160,7 +1198,7 @@ var Scriptures = (function () {
                 'gridName': 'Col.',
                 'citeFull': 'Colossians'},
         '152': {'id': 152,
-                'abbr': '1 thes',
+                'abbr': '1_thes',
                 'citeAbbr': '1 Thes.',
                 'fullName': '1 Thessalonians',
                 'numChapters': 5,
@@ -1174,7 +1212,7 @@ var Scriptures = (function () {
                 'gridName': '1 Thes.',
                 'citeFull': '1 Thessalonians'},
         '153': {'id': 153,
-                'abbr': '2 thes',
+                'abbr': '2_thes',
                 'citeAbbr': '2 Thes.',
                 'fullName': '2 Thessalonians',
                 'numChapters': 3,
@@ -1188,7 +1226,7 @@ var Scriptures = (function () {
                 'gridName': '2 Thes.',
                 'citeFull': '2 Thessalonians'},
         '154': {'id': 154,
-                'abbr': '1 tim',
+                'abbr': '1_tim',
                 'citeAbbr': '1 Tim.',
                 'fullName': '1 Timothy',
                 'numChapters': 6,
@@ -1202,7 +1240,7 @@ var Scriptures = (function () {
                 'gridName': '1 Tim.',
                 'citeFull': '1 Timothy'},
         '155': {'id': 155,
-                'abbr': '2 tim',
+                'abbr': '2_tim',
                 'citeAbbr': '2 Tim.',
                 'fullName': '2 Timothy',
                 'numChapters': 4,
@@ -1272,7 +1310,7 @@ var Scriptures = (function () {
                 'gridName': 'James',
                 'citeFull': 'James'},
         '160': {'id': 160,
-                'abbr': '1 pet',
+                'abbr': '1_pet',
                 'citeAbbr': '1 Pet.',
                 'fullName': '1 Peter',
                 'numChapters': 5,
@@ -1286,7 +1324,7 @@ var Scriptures = (function () {
                 'gridName': '1 Peter',
                 'citeFull': '1 Peter'},
         '161': {'id': 161,
-                'abbr': '2 pet',
+                'abbr': '2_pet',
                 'citeAbbr': '2 Pet.',
                 'fullName': '2 Peter',
                 'numChapters': 3,
@@ -1300,7 +1338,7 @@ var Scriptures = (function () {
                 'gridName': '2 Peter',
                 'citeFull': '2 Peter'},
         '162': {'id': 162,
-                'abbr': '1 jn',
+                'abbr': '1_jn',
                 'citeAbbr': '1 Jn.',
                 'fullName': '1 John',
                 'numChapters': 5,
@@ -1314,7 +1352,7 @@ var Scriptures = (function () {
                 'gridName': '1 John',
                 'citeFull': '1 John'},
         '163': {'id': 163,
-                'abbr': '2 jn',
+                'abbr': '2_jn',
                 'citeAbbr': '2 Jn.',
                 'fullName': '2 John',
                 'numChapters': 1,
@@ -1328,7 +1366,7 @@ var Scriptures = (function () {
                 'gridName': '2 John',
                 'citeFull': '2 John'},
         '164': {'id': 164,
-                'abbr': '3 jn',
+                'abbr': '3_jn',
                 'citeAbbr': '3 Jn.',
                 'fullName': '3 John',
                 'numChapters': 1,
@@ -1426,7 +1464,7 @@ var Scriptures = (function () {
                 'gridName': '8 Wit.',
                 'citeFull': 'Eight Witnesses'},
         '205': {'id': 205,
-                'abbr': '1 ne',
+                'abbr': '1_ne',
                 'citeAbbr': '1 Ne.',
                 'fullName': 'First Nephi',
                 'numChapters': 22,
@@ -1440,7 +1478,7 @@ var Scriptures = (function () {
                 'gridName': '1 Nephi',
                 'citeFull': '1 Nephi'},
         '206': {'id': 206,
-                'abbr': '2 ne',
+                'abbr': '2_ne',
                 'citeAbbr': '2 Ne.',
                 'fullName': 'Second Nephi',
                 'numChapters': 33,
@@ -1510,7 +1548,7 @@ var Scriptures = (function () {
                 'gridName': 'Omni',
                 'citeFull': 'Omni'},
         '211': {'id': 211,
-                'abbr': 'w of m',
+                'abbr': 'w_of_m',
                 'citeAbbr': 'W of M',
                 'fullName': 'Words of Mormon',
                 'numChapters': 1,
@@ -1566,7 +1604,7 @@ var Scriptures = (function () {
                 'gridName': 'Hel.',
                 'citeFull': 'Helaman'},
         '215': {'id': 215,
-                'abbr': '3 ne',
+                'abbr': '3_ne',
                 'citeAbbr': '3 Ne.',
                 'fullName': 'Third Nephi',
                 'numChapters': 30,
@@ -1580,7 +1618,7 @@ var Scriptures = (function () {
                 'gridName': '3 Nephi',
                 'citeFull': '3 Nephi'},
         '216': {'id': 216,
-                'abbr': '4 ne',
+                'abbr': '4_ne',
                 'citeAbbr': '4 Ne.',
                 'fullName': 'Fourth Nephi',
                 'numChapters': 1,
@@ -1720,7 +1758,7 @@ var Scriptures = (function () {
                 'gridName': 'Fac.',
                 'citeFull': 'Facsimile'},
         '404': {'id': 404,
-                'abbr': 'js m',
+                'abbr': 'js_m',
                 'citeAbbr': 'JS&mdash;M',
                 'fullName': 'Joseph Smith&mdash;Matthew',
                 'numChapters': 1,
@@ -1734,7 +1772,7 @@ var Scriptures = (function () {
                 'gridName': 'JS&mdash;M',
                 'citeFull': 'Joseph Smith&mdash;Matthew'},
         '405': {'id': 405,
-                'abbr': 'js h',
+                'abbr': 'js_h',
                 'citeAbbr': 'JS&mdash;H',
                 'fullName': 'Joseph Smith&mdash;History',
                 'numChapters': 1,
@@ -1748,7 +1786,7 @@ var Scriptures = (function () {
                 'gridName': 'JS&mdash;H',
                 'citeFull': 'Joseph Smith&mdash;History'},
         '406': {'id': 406,
-                'abbr': 'a of f',
+                'abbr': 'a_of_f',
                 'citeAbbr': 'A of F',
                 'fullName': 'The Articles of Faith',
                 'numChapters': 1,
