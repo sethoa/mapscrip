@@ -1,16 +1,17 @@
 // JSLint directives
 /*property
     LatLngBounds, Marker, abbr, animate, append, appendTo, backName,
-    bookByAbbr, bookById, bookChapterValid, books, citeAbbr, citeFull,
-    complete, css, duration, each, error, exec, extend, find, fitBounds,
-    forEach, fullName, get, getAttribute, getCenter, getPosition,
-    getScripture, getTitle, gridName, hash, id, jstTitle, keys, lat, length,
-    lng, location, log, map, maps, maxBookId, minBookId, navigateBook,
-    navigateChapter, navigateHome, navigateVolumeBook, nextChapter,
-    numChapters, onHashChanged, opacity, panTo, parentBookId, position,
-    prevChapter, push, queue, remove, round, setMap, setZoom, showLocation,
-    slice, split, subdiv, substring, success, title, tocName,
-    urlForScriptureChapter, urlPath, volumes, webTitle
+    bookByAbbr, bookById, books, citeAbbr, citeFull, clearTimeout, complete,
+    crumbsIn, crumbsOut, css, duration, each, error, exec, extend, find,
+    fitBounds, forEach, fullName, get, getAttribute, getCenter, getPosition,
+    getScripture, getTitle, google, gridName, hasOwnProperty, hash, id,
+    jstTitle, keys, lat, length, lng, location, log, map, maps, maxBookId,
+    minBookId, navigateBook, navigateChapter, navigateHome, navigateVolumeBook,
+    nextChapter, numChapters, onHashChanged, opacity, panTo, parentBookId,
+    position, prevChapter, push, queue, remove, round, scripIn, scripOut,
+    setMap, setTimeout, setZoom, setupMarkers, showLocation, slice, split,
+    subdiv, substring, success, title, tocName, transitionBreadcrumbs,
+    transitionScriptures, urlForScriptureChapter, urlPath, volumes, webTitle
 */
 /*jslint browser: true */
 /*global  $, map, console, google, window */
@@ -38,6 +39,9 @@ var Scriptures = (function () {
     /*------------------------------------------------------------------------
      *                      PRIVATE VARIABLES
      */
+    // Array of all the elements that are currently animating.
+    var animatingElements = {};
+
     // Main data structure of all book objects.
     var books;
 
@@ -58,6 +62,10 @@ var Scriptures = (function () {
 
     // Array of top-level volumes.
     var volumeArray;
+
+    // This is our interface to private methods that we may need to call from
+    // a nested context.  This is needed to make JSLint happy with our code.
+    var privateInterface = {};
 
     // This is our internal module name for the object that we will return to
     // deliver the public interface of this Scriptures package.
@@ -154,7 +162,7 @@ var Scriptures = (function () {
         return false;
     };
 
-    var setupMarkers = function (content) {
+    privateInterface.setupMarkers = function (content) {
         var bounds;
         var latitude;
         var links;
@@ -169,7 +177,7 @@ var Scriptures = (function () {
         if (window.google === undefined) {
             // This is too early to call this method.  Let's pause for a second and try again.
             // This could happen on the initial load of the uncached page, for example.
-            retryId = window.setTimeout(setupMarkers, retryDelay, content);
+            retryId = window.setTimeout(privateInterface.setupMarkers, retryDelay, content);
 
             // Every time we have to retry, double the delay time.
             retryDelay += retryDelay;
@@ -238,7 +246,12 @@ var Scriptures = (function () {
             : '');
     };
 
-    var transitionBreadcrumbs = function (newCrumbs) {
+    privateInterface.transitionBreadcrumbs = function (newCrumbs) {
+        if (animatingElements.hasOwnProperty('crumbsIn') || animatingElements.hasOwnProperty('crumbsOut')) {
+            window.setTimeout(privateInterface.transitionBreadcrumbs, 200, newCrumbs);
+            return;
+        }
+
         // Use cross-dissolve transition, non-directional
         var crumbs = $('#header #crumb ul');
 
@@ -248,6 +261,7 @@ var Scriptures = (function () {
             newCrumbs = $(newCrumbs);
         }
 
+        animatingElements.crumbsOut = crumbs;
         crumbs.animate({
             opacity: 0  // Fade out the current breadcrumbs
         }, {
@@ -255,19 +269,29 @@ var Scriptures = (function () {
             duration: ANIMATION_DURATION,
             complete: function () {
                 crumbs.remove();
+                delete animatingElements.crumbsOut;
             }
         });
 
         newCrumbs.css({opacity: 0}).appendTo('#crumb');
+        animatingElements.crumbsIn = newCrumbs;
         newCrumbs.animate({
             opacity: 1  // Fade in the new breadcrumbs
         }, {
             queue: false,
-            duration: ANIMATION_DURATION
+            duration: ANIMATION_DURATION,
+            complete: function () {
+                delete animatingElements.crumbsIn;
+            }
         });
     };
 
-    var transitionScriptures = function (content) {
+    privateInterface.transitionScriptures = function (content) {
+        if (animatingElements.hasOwnProperty('scripIn') || animatingElements.hasOwnProperty('scripOut')) {
+            window.setTimeout(privateInterface.transitionScriptures, 200, content);
+            return;
+        }
+
         // Use cross-dissolve transition, non-directional
         var outdiv = $('#scripnav');
 
@@ -275,6 +299,7 @@ var Scriptures = (function () {
             outdiv = $('.scripturewrapper');
         }
 
+        animatingElements.scripOut = outdiv;
         outdiv.animate({
             opacity: 0
         }, {
@@ -282,18 +307,23 @@ var Scriptures = (function () {
             duration: 1000,
             complete: function () {
                 outdiv.remove();
+                delete animatingElements.scripOut;
             }
         });
 
         content.css({opacity: 0}).appendTo('#scriptures');
+        animatingElements.scripIn = content;
         content.animate({
             opacity: 1
         }, {
             queue: false,
-            duration: 1000
+            duration: 1000,
+            complete: function () {
+                delete animatingElements.scripIn;
+            }
         });
 
-        setupMarkers(content);
+        privateInterface.setupMarkers(content);
     };
 
     /*------------------------------------------------------------------------
@@ -303,8 +333,8 @@ var Scriptures = (function () {
         html = $(html);
         html.find('.navheading').append('<div class="nextprev">' + nextPrevLink + '</div>');
 
-        transitionBreadcrumbs();
-        transitionScriptures(html);
+        privateInterface.transitionBreadcrumbs();
+        privateInterface.transitionScriptures(html);
     };
 
     var getScriptureFailed = function () {
@@ -540,8 +570,8 @@ var Scriptures = (function () {
             displayedVolume = undefined;
         }
 
-        transitionBreadcrumbs(breadcrumbs(displayedVolume));
-        transitionScriptures($(navContents));
+        privateInterface.transitionBreadcrumbs(breadcrumbs(displayedVolume));
+        privateInterface.transitionScriptures($(navContents));
     };
 
     publicInterface.navigateVolumeBook = function (volume, book) {
@@ -565,8 +595,8 @@ var Scriptures = (function () {
 
             navContents += '</div>';
 
-            transitionBreadcrumbs(crumbs);
-            transitionScriptures($(navContents));
+            privateInterface.transitionBreadcrumbs(crumbs);
+            privateInterface.transitionScriptures($(navContents));
         }
     };
 
