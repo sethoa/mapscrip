@@ -102,7 +102,7 @@ var Scriptures = (function () {
                 crumbs += '<li><a href="javascript:void(0);" onclick="Scriptures.hash(' +
                         volume.id + ')">' + volume.fullName + '</a></li>';
 
-                if (chapter === undefined) {
+                if (chapter === undefined || chapter === 0) {
                     crumbs += '<li>' + book.tocName + '</li>';
                 } else {
                     crumbs += '<li><a href="javascript:void(0);" onclick="Scriptures.hash(0, ' +
