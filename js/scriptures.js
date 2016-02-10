@@ -1,15 +1,16 @@
 // JSLint directives
 /*property
     LatLngBounds, Marker, abbr, animate, append, appendTo, backName,
-    bookByAbbr, bookById, books, citeAbbr, citeFull, complete, css, duration,
-    each, error, exec, extend, find, fitBounds, forEach, fullName, get,
-    getAttribute, getCenter, getPosition, getScripture, getTitle, gridName,
-    hash, id, jstTitle, keys, lat, length, lng, location, log, map, maps,
-    maxBookId, minBookId, navigateBook, navigateChapter, navigateHome,
-    navigateVolumeBook, nextChapter, numChapters, onHashChanged, opacity,
-    panTo, parentBookId, position, prevChapter, push, queue, remove, round,
-    setMap, setZoom, showLocation, slice, split, subdiv, substring, success,
-    title, tocName, urlForScriptureChapter, urlPath, volumes, webTitle
+    bookByAbbr, bookById, bookChapterValid, books, citeAbbr, citeFull,
+    complete, css, duration, each, error, exec, extend, find, fitBounds,
+    forEach, fullName, get, getAttribute, getCenter, getPosition,
+    getScripture, getTitle, gridName, hash, id, jstTitle, keys, lat, length,
+    lng, location, log, map, maps, maxBookId, minBookId, navigateBook,
+    navigateChapter, navigateHome, navigateVolumeBook, nextChapter,
+    numChapters, onHashChanged, opacity, panTo, parentBookId, position,
+    prevChapter, push, queue, remove, round, setMap, setZoom, showLocation,
+    slice, split, subdiv, substring, success, title, tocName,
+    urlForScriptureChapter, urlPath, volumes, webTitle
 */
 /*jslint browser: true */
 /*global  $, map, console, google, window */
@@ -52,6 +53,9 @@ var Scriptures = (function () {
     // Breadcrumbs for requested scripture content.
     var requestedCrumbs;
 
+    // Number of milliseconds to wait until retrying the setupMarkers() method.
+    var retryDelay = 500;
+
     // Array of top-level volumes.
     var volumeArray;
 
@@ -62,6 +66,20 @@ var Scriptures = (function () {
     /*------------------------------------------------------------------------
      *                      PRIVATE METHODS
      */
+    var bookChapterValid = function (bookId, chapter) {
+        var book = publicInterface.bookById(bookId);
+
+        if (book === undefined || chapter < 0 || chapter > book.numChapters) {
+            return false;
+        }
+
+        if (chapter === 0 && book.numChapters > 0) {
+            return false;
+        }
+
+        return true;
+    };
+
     var breadcrumbs = function (volume, book, chapter) {
         var crumbs;
 
@@ -144,8 +162,25 @@ var Scriptures = (function () {
         var matches;
         var marker;
         var placename;
+        var retryId;
         var value;
         var zoomFactor = 400;
+
+        if (window.google === undefined) {
+            // This is too early to call this method.  Let's pause for a second and try again.
+            // This could happen on the initial load of the uncached page, for example.
+            retryId = window.setTimeout(setupMarkers, retryDelay, content);
+
+            // Every time we have to retry, double the delay time.
+            retryDelay += retryDelay;
+
+            if (retryDelay > 5000) {
+                // Stop retrying after a number of attempts.
+                window.clearTimeout(retryId);
+            }
+
+            return;
+        }
 
         if (gmMarkers.length > 0) {
             clearMarkers();
@@ -355,7 +390,10 @@ var Scriptures = (function () {
     };
 
     publicInterface.onHashChanged = function () {
+        var bookId;
+        var chapter;
         var ids = [];
+        var volumeId;
 
         if (window.location.hash !== '' && window.location.hash.length > 1) {
             // Remove leading # and split the string on color delimiters
@@ -366,13 +404,35 @@ var Scriptures = (function () {
             publicInterface.navigateHome();
         } else if (ids.length === 1) {
             // Show single volume's table of contents
-            publicInterface.navigateHome(Number(ids[0]));
+            volumeId = Number(ids[0]);
+
+            if (volumeId < volumeArray[0].id || volumeId > volumeArray[volumeArray.length - 1].id) {
+                // If the volume doesn't pass our sanity check, ignore it and navigate home
+                publicInterface.navigateHome();
+            }
+
+            publicInterface.navigateHome(volumeId);
         } else if (ids.length === 2) {
             // Show book's list of chapters
-            publicInterface.navigateBook(Number(ids[1]));
+            bookId = Number(ids[1]);
+
+            if (publicInterface.bookById(bookId) === undefined) {
+                // If the book ID isn't valid, navigate home
+                publicInterface.navigateHome();
+            }
+
+            publicInterface.navigateBook(bookId);
         } else {
             // Display a specific chapter
-            publicInterface.navigateChapter(Number(ids[1]), Number(ids[2]));
+            bookId = Number(ids[1]);
+            chapter = Number(ids[2]);
+
+            if (!bookChapterValid(bookId, chapter)) {
+                // If the book/chapter combination isn't valid, navigate home
+                publicInterface.navigateHome();
+            }
+
+            publicInterface.navigateChapter(bookId, chapter);
         }
     };
 
