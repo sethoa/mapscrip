@@ -56,7 +56,8 @@
 
         // Navigate the scriptures panel to the home view
         $(function () {
-            Scriptures.navigateHome();
+            $(window).bind('hashchange', Scriptures.onHashChanged);
+            Scriptures.onHashChanged();
         });
 
         function getScripture(args) {

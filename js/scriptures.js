@@ -1,18 +1,18 @@
 // JSLint directives
 /*property
-    LatLngBounds, Marker, abbr, animate, appendTo, attr, backName, bookByAbbr,
-    bookById, books, citeAbbr, citeFull, click, complete, css, duration, each,
-    error, exec, extend, fitBounds, forEach, fullName, get, getAttribute,
-    getCenter, getPosition, getScripture, getTitle, gridName, html, id,
-    jstTitle, lat, length, lng, log, map, maps, maxBookId, minBookId,
-    navigateBook, navigateChapter, navigateHome, navigateVolumeBook,
-    nextChapter, numChapters, opacity, panTo, parentBookId, position,
-    prevChapter, push, queue, remove, round, setMap, setZoom, showLocation,
-    slice, subdiv, success, target, title, titleForBookChapter, tocName,
-    urlForScriptureChapter, urlPath, volumes, webTitle
+    LatLngBounds, Marker, abbr, animate, append, appendTo, backName,
+    bookByAbbr, bookById, books, citeAbbr, citeFull, complete, css, duration,
+    each, error, exec, extend, find, fitBounds, forEach, fullName, get,
+    getAttribute, getCenter, getPosition, getScripture, getTitle, gridName,
+    hash, id, jstTitle, keys, lat, length, lng, location, log, map, maps,
+    maxBookId, minBookId, navigateBook, navigateChapter, navigateHome,
+    navigateVolumeBook, nextChapter, numChapters, onHashChanged, opacity,
+    panTo, parentBookId, position, prevChapter, push, queue, remove, round,
+    setMap, setZoom, showLocation, slice, split, subdiv, substring, success,
+    title, tocName, urlForScriptureChapter, urlPath, volumes, webTitle
 */
 /*jslint browser: true */
-/*global  $, map, console, google */
+/*global  $, map, console, google, window */
 
 var Scriptures = (function () {
     // Force the browser into JavaScript strict compliance mode.
@@ -68,18 +68,18 @@ var Scriptures = (function () {
         if (volume === undefined) {
             crumbs = '<ul><li>The Scriptures</li>';
         } else {
-            crumbs = '<ul><li><a href="javascript:void(0);" onclick="Scriptures.navigateHome()">The Scriptures</a></li>';
+            crumbs = '<ul><li><a href="javascript:void(0);" onclick="Scriptures.hash()">The Scriptures</a></li>';
 
             if (book === undefined) {
                 crumbs += '<li>' + volume.fullName + '</li>';
             } else {
-                crumbs += '<li><a href="javascript:void(0);" onclick="Scriptures.navigateHome(' +
+                crumbs += '<li><a href="javascript:void(0);" onclick="Scriptures.hash(' +
                         volume.id + ')">' + volume.fullName + '</a></li>';
 
                 if (chapter === undefined) {
                     crumbs += '<li>' + book.tocName + '</li>';
                 } else {
-                    crumbs += '<li><a href="javascript:void(0);" onclick="Scriptures.navigateBook(' +
+                    crumbs += '<li><a href="javascript:void(0);" onclick="Scriptures.hash(0, ' +
                             book.id + ')">' + book.tocName + '</a></li>';
                     crumbs += '<li>' + chapter + '</li>';
                 }
@@ -136,9 +136,10 @@ var Scriptures = (function () {
         return false;
     };
 
-    var setupMarkers = function () {
+    var setupMarkers = function (content) {
         var bounds;
         var latitude;
+        var links;
         var longitude;
         var matches;
         var marker;
@@ -150,7 +151,13 @@ var Scriptures = (function () {
             clearMarkers();
         }
 
-        $('a[onclick^="showLocation("]').each(function () {
+        if (content === undefined) {
+            links = $('a[onclick^="showLocation("]');
+        } else {
+            links = $(content).find('a[onclick^="showLocation("]');
+        }
+
+        links.each(function () {
             value = arguments[1].getAttribute('onclick');
 
             matches = LAT_LON_PARSER.exec(value);
@@ -191,8 +198,10 @@ var Scriptures = (function () {
     };
 
     var titleForBookChapter = function (book, chapter) {
-        return book.citeAbbr + (chapter > 0 ? ' ' + chapter : '');
-    }
+        return book.citeAbbr + (chapter > 0
+            ? ' ' + chapter
+            : '');
+    };
 
     var transitionBreadcrumbs = function (newCrumbs) {
         // Use cross-dissolve transition, non-directional
@@ -208,7 +217,7 @@ var Scriptures = (function () {
             opacity: 0  // Fade out the current breadcrumbs
         }, {
             queue: false,
-            duration: 1000,
+            duration: ANIMATION_DURATION,
             complete: function () {
                 crumbs.remove();
             }
@@ -219,7 +228,7 @@ var Scriptures = (function () {
             opacity: 1  // Fade in the new breadcrumbs
         }, {
             queue: false,
-            duration: 1000
+            duration: ANIMATION_DURATION
         });
     };
 
@@ -249,7 +258,7 @@ var Scriptures = (function () {
             duration: 1000
         });
 
-        setupMarkers();
+        setupMarkers(content);
     };
 
     /*------------------------------------------------------------------------
@@ -257,7 +266,7 @@ var Scriptures = (function () {
      */
     var getScriptureCallback = function (html) {
         html = $(html);
-        html.find('.navheading').append('<div class="nextprev">' + nextPrevLink + '</div>'); 
+        html.find('.navheading').append('<div class="nextprev">' + nextPrevLink + '</div>');
 
         transitionBreadcrumbs();
         transitionScriptures(html);
@@ -305,6 +314,24 @@ var Scriptures = (function () {
         }
     };
 
+    publicInterface.hash = function (volumeId, bookId, chapter) {
+        var newHash = '';
+
+        if (volumeId !== undefined) {
+            newHash += volumeId;
+
+            if (bookId !== undefined) {
+                newHash += ':' + bookId;
+
+                if (chapter !== undefined) {
+                    newHash += ':' + chapter;
+                }
+            }
+        }
+
+        window.location.hash = newHash;
+    };
+
     publicInterface.nextChapter = function (bookId, chapter) {
         var book = publicInterface.bookById(bookId);
         var nextBook = {};
@@ -324,6 +351,28 @@ var Scriptures = (function () {
 
                 return [nextBook.id, nextChapter, titleForBookChapter(nextBook, 1)];
             }
+        }
+    };
+
+    publicInterface.onHashChanged = function () {
+        var ids = [];
+
+        if (window.location.hash !== '' && window.location.hash.length > 1) {
+            // Remove leading # and split the string on color delimiters
+            ids = window.location.hash.substring(1).split(':');
+        }
+
+        if (ids.length <= 0) {
+            publicInterface.navigateHome();
+        } else if (ids.length === 1) {
+            // Show single volume's table of contents
+            publicInterface.navigateHome(Number(ids[0]));
+        } else if (ids.length === 2) {
+            // Show book's list of chapters
+            publicInterface.navigateBook(Number(ids[1]));
+        } else {
+            // Display a specific chapter
+            publicInterface.navigateChapter(Number(ids[1]), Number(ids[2]));
         }
     };
 
@@ -387,15 +436,17 @@ var Scriptures = (function () {
             if (nextPrev === undefined) {
                 nextPrevLink = '';
             } else {
-                nextPrevLink = '<a href="javascript:void(0);" onclick="Scriptures.navigateChapter(' +
-                    nextPrev[0] + ', ' + nextPrev[1] + ')" title="' + nextPrev[2] + '")"><i class="material-icons">skip_previous</i></a>';
+                nextPrevLink = '<a href="javascript:void(0);" onclick="Scriptures.hash(0, ' +
+                        nextPrev[0] + ', ' + nextPrev[1] + ')" title="' + nextPrev[2] +
+                        '")"><i class="material-icons">skip_previous</i></a>';
             }
 
             nextPrev = publicInterface.nextChapter(bookId, chapter);
 
             if (nextPrev !== undefined) {
-                nextPrevLink += '<a href="javascript:void(0);" onclick="Scriptures.navigateChapter(' +
-                    nextPrev[0] + ', ' + nextPrev[1] + ')" title="' + nextPrev[2] + '")"><i class="material-icons">skip_next</i></a>';
+                nextPrevLink += '<a href="javascript:void(0);" onclick="Scriptures.hash(0, ' +
+                        nextPrev[0] + ', ' + nextPrev[1] + ')" title="' + nextPrev[2] +
+                        '")"><i class="material-icons">skip_next</i></a>';
             }
 
             $.get(publicInterface.urlForScriptureChapter(bookId, chapter, verses, jst))
@@ -415,7 +466,7 @@ var Scriptures = (function () {
 
                 volume.books.forEach(function (book) {
                     navContents += '<a class="waves-effect waves-custom waves-ripple btn" id="' +
-                            book.id + '">' + book.gridName + '</a>';
+                            book.id + '" href="#' + volume.id + ':' + book.id + '">' + book.gridName + '</a>';
                 });
 
                 navContents += '</div>';
@@ -431,13 +482,6 @@ var Scriptures = (function () {
 
         transitionBreadcrumbs(breadcrumbs(displayedVolume));
         transitionScriptures($(navContents));
-
-        $('#scripnav a').click(function (event) {
-            var book = publicInterface.bookById($(event.target).attr('id'));
-            var volume = publicInterface.volumes()[book.parentBookId - 1];
-
-            publicInterface.navigateVolumeBook(volume, book);
-        });
     };
 
     publicInterface.navigateVolumeBook = function (volume, book) {
@@ -455,7 +499,7 @@ var Scriptures = (function () {
 
             while (chapter <= book.numChapters) {
                 navContents += '<a class="waves-effect waves-custom waves-ripple btn chapter" id="' +
-                        chapter + '">' + chapter + '</a>';
+                        chapter + '" href="#0:' + book.id + ':' + chapter + '">' + chapter + '</a>';
                 chapter += 1;
             }
 
@@ -463,10 +507,6 @@ var Scriptures = (function () {
 
             transitionBreadcrumbs(crumbs);
             transitionScriptures($(navContents));
-
-            $('#scripnav a').click(function (event) {
-                publicInterface.navigateChapter(book.id, Number($(event.target).attr('id')));
-            });
         }
     };
 
