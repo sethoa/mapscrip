@@ -162,6 +162,15 @@ var Scriptures = (function () {
         return false;
     };
 
+    var titleForBookChapter = function (book, chapter) {
+        return book.citeAbbr + (chapter > 0
+            ? ' ' + chapter
+            : '');
+    };
+
+    /*------------------------------------------------------------------------
+     *                      PRIVATE METHODS CALLED RECURSIVELY
+     */
     privateInterface.setupMarkers = function (content) {
         var bounds;
         var latitude;
@@ -238,12 +247,6 @@ var Scriptures = (function () {
                 map.fitBounds(bounds);
             }
         }
-    };
-
-    var titleForBookChapter = function (book, chapter) {
-        return book.citeAbbr + (chapter > 0
-            ? ' ' + chapter
-            : '');
     };
 
     privateInterface.transitionBreadcrumbs = function (newCrumbs) {
